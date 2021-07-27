@@ -1,1 +1,1 @@
-# Stronghold Communication
+# Stronghold P2p
