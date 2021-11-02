@@ -158,13 +158,10 @@ pub enum ListenRelayErr {
     ProtocolNotSupported,
     /// Establishing a connection to the relay failed.
     #[error("Dial Relay Error: `{0}`")]
-    DialRelay(DialErr),
-    /// Listening on the address failed on the transport layer.
-    #[error("Transport error: `{0}`")]
-    Transport(TransportErr),
-    /// The communication system was shut down before the listening attempt resolved.
-    #[error("The network task was shut down.")]
-    Shutdown,
+    DialRelay(#[from] DialErr),
+    /// Error on listening on an address.
+    #[error("Listening Error: `{0}`")]
+    Listen(ListenErr),
 }
 
 impl TryFrom<DialError> for ListenRelayErr {
@@ -174,14 +171,8 @@ impl TryFrom<DialError> for ListenRelayErr {
     }
 }
 
-impl From<DialErr> for ListenRelayErr {
-    fn from(err: DialErr) -> Self {
-        ListenRelayErr::DialRelay(err)
-    }
-}
-
 impl From<TransportError<io::Error>> for ListenRelayErr {
     fn from(err: TransportError<io::Error>) -> Self {
-        ListenRelayErr::Transport(err.into())
+        ListenRelayErr::Listen(err.into())
     }
 }
