@@ -9,7 +9,12 @@ use crate::{
 use libp2p::core::{multihash, PeerId};
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
-use std::{collections::HashMap, marker::PhantomData};
+use std::{
+    collections::HashMap,
+    convert::{TryFrom, TryInto},
+    marker::PhantomData,
+    sync::Arc,
+};
 
 #[derive(Serialize, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct SerdePeerId(Vec<u8>);
@@ -68,10 +73,7 @@ pub enum SerdeRule {
 }
 
 impl SerdeRule {
-    pub fn into_rule_with_restriction<TRq, F>(self, restriction: F) -> Rule<TRq, F>
-    where
-        F: Clone + Fn(&TRq) -> bool,
-    {
+    pub fn into_rule_with_restriction<TRq>(self, restriction: Arc<dyn Fn(&TRq) -> bool + Send + Sync>) -> Rule<TRq> {
         Rule::try_from(self).unwrap_or(Rule::Restricted {
             restriction,
             _maker: PhantomData,
@@ -79,11 +81,8 @@ impl SerdeRule {
     }
 }
 
-impl<TRq, F> From<Rule<TRq, F>> for SerdeRule
-where
-    F: Clone + Fn(&TRq) -> bool,
-{
-    fn from(rule: Rule<TRq, F>) -> Self {
+impl<TRq> From<Rule<TRq>> for SerdeRule {
+    fn from(rule: Rule<TRq>) -> Self {
         match rule {
             Rule::AllowAll => SerdeRule::AllowAll,
             Rule::RejectAll => SerdeRule::RejectAll,
@@ -93,10 +92,7 @@ where
     }
 }
 
-impl<TRq, F> TryFrom<SerdeRule> for Rule<TRq, F>
-where
-    F: Clone + Fn(&TRq) -> bool,
-{
+impl<TRq> TryFrom<SerdeRule> for Rule<TRq> {
     type Error = ();
     fn try_from(rule: SerdeRule) -> Result<Self, Self::Error> {
         match rule {
