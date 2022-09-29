@@ -208,9 +208,11 @@ where
 
     // Successfully received a requests and potentially sent a response.
     fn inject_fully_negotiated_inbound(&mut self, send_response: bool, request_id: RequestId) {
-        let event = send_response
-            .then(|| HandlerOutEvent::SentResponse(request_id))
-            .unwrap_or(HandlerOutEvent::SendResponseOmission(request_id));
+        let event = if send_response {
+            HandlerOutEvent::SentResponse(request_id)
+        } else {
+            HandlerOutEvent::SendResponseOmission(request_id)
+        };
         self.pending_events.push_back(event);
     }
 
