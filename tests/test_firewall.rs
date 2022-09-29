@@ -11,18 +11,18 @@ use futures::{
 use libp2p::tcp::TokioTcpConfig;
 use p2p::{
     firewall::{
-        permissions::{FirewallPermission, PermissionValue, RequestPermissions, VariantPermission},
-        FirewallRequest, FirewallRules, FwRequest, Rule,
+        permissions::{FirewallPermission, PermissionValue, VariantPermission},
+        FirewallRequest, FirewallRules, Rule,
     },
-    ChannelSinkConfig, EventChannel, InboundFailure, NetworkEvent, OutboundFailure, PeerId, ReceiveRequest,
-    StrongholdP2p, StrongholdP2pBuilder,
+    ChannelSinkConfig, EventChannel, InboundFailure, Network, NetworkBuilder, NetworkEvent, OutboundFailure, PeerId,
+    ReceiveRequest,
 };
+use rand::random;
 use serde::{Deserialize, Serialize};
 use std::{fmt, future, marker::PhantomData, sync::Arc, task::Poll, time::Duration};
-use stronghold_utils::random::random;
 use tokio::time::sleep;
 
-type TestPeer = StrongholdP2p<Request, Response, RequestPermission>;
+type TestPeer = Network<Request, Response>;
 
 macro_rules! expect_ok (
      ($expression:expr, $config:expr) => {
@@ -30,10 +30,19 @@ macro_rules! expect_ok (
     };
 );
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RequestPermissions)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum Request {
     Ping,
     Other,
+}
+
+impl VariantPermission for Request {
+    fn permission(&self) -> PermissionValue {
+        match self {
+            Request::Ping => PermissionValue::new(0).expect("0 < 32"),
+            Request::Other => PermissionValue::new(1).expect("1 < 32"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -43,7 +52,7 @@ enum Response {
 }
 
 type NewPeer = (
-    mpsc::Receiver<FirewallRequest<RequestPermission>>,
+    mpsc::Receiver<FirewallRequest<Request>>,
     mpsc::Receiver<ReceiveRequest<Request, Response>>,
     mpsc::Receiver<NetworkEvent>,
     TestPeer,
@@ -53,7 +62,7 @@ async fn init_peer() -> NewPeer {
     let (firewall_tx, firewall_rx) = mpsc::channel(10);
     let (request_channel, rq_rx) = EventChannel::new(10, ChannelSinkConfig::Block);
     let (event_channel, event_rx) = EventChannel::new(10, ChannelSinkConfig::Block);
-    let builder = StrongholdP2pBuilder::<Request, Response, RequestPermission>::new(
+    let builder = NetworkBuilder::<Request, Response>::new(
         firewall_tx,
         request_channel,
         Some(event_channel),
@@ -78,7 +87,7 @@ async fn init_peer() -> NewPeer {
 enum TestPermission {
     AllowAll,
     RejectAll,
-    Restricted(RequestPermission),
+    Restricted(Request),
 }
 
 impl TestPermission {
@@ -86,25 +95,25 @@ impl TestPermission {
         match random::<u8>() % 4 {
             0 => TestPermission::AllowAll,
             1 => TestPermission::RejectAll,
-            2 => TestPermission::Restricted(RequestPermission::Ping),
-            3 => TestPermission::Restricted(RequestPermission::Other),
+            2 => TestPermission::Restricted(Request::Ping),
+            3 => TestPermission::Restricted(Request::Other),
             _ => unreachable!(),
         }
     }
 
-    fn restrict_by_type(rq: &RequestPermission, allowed: RequestPermission) -> bool {
+    fn restrict_by_type(rq: &Request, allowed: Request) -> bool {
         let permissions = FirewallPermission::none().add_permissions([&allowed.permission()]);
         permissions.permits(&rq.permission())
     }
 
-    fn as_rule(&self) -> Rule<RequestPermission> {
+    fn as_rule(&self) -> Rule<Request> {
         match self {
             TestPermission::AllowAll => Rule::AllowAll,
             TestPermission::RejectAll => Rule::RejectAll,
             TestPermission::Restricted(permission) => {
                 let permission = permission.clone();
                 Rule::Restricted {
-                    restriction: Arc::new(move |rq: &RequestPermission| Self::restrict_by_type(rq, permission.clone())),
+                    restriction: Arc::new(move |rq: &Request| Self::restrict_by_type(rq, permission.clone())),
                     _maker: PhantomData,
                 }
             }
@@ -180,8 +189,8 @@ impl<'a> RulesTestConfig<'a> {
         let is_allowed = match individual_permissions {
             TestPermission::AllowAll => true,
             TestPermission::RejectAll => false,
-            TestPermission::Restricted(RequestPermission::Ping) => matches!(self.req, Request::Ping),
-            TestPermission::Restricted(RequestPermission::Other) => matches!(self.req, Request::Other),
+            TestPermission::Restricted(Request::Ping) => matches!(self.req, Request::Ping),
+            TestPermission::Restricted(Request::Other) => matches!(self.req, Request::Other),
         };
         if !is_allowed {
             match individual_permissions {
@@ -324,7 +333,7 @@ struct AskTestConfig<'a> {
     peer_a: &'a mut TestPeer,
 
     peer_b: &'a mut TestPeer,
-    b_firewall_rx: &'a mut mpsc::Receiver<FirewallRequest<RequestPermission>>,
+    b_firewall_rx: &'a mut mpsc::Receiver<FirewallRequest<Request>>,
     b_events_rx: &'a mut mpsc::Receiver<NetworkEvent>,
     b_request_rx: &'a mut mpsc::Receiver<ReceiveRequest<Request, Response>>,
 
@@ -346,7 +355,7 @@ impl<'a> AskTestConfig<'a> {
     fn new_test_case(
         peer_a: &'a mut TestPeer,
         peer_b: &'a mut TestPeer,
-        b_firewall_rx: &'a mut mpsc::Receiver<FirewallRequest<RequestPermission>>,
+        b_firewall_rx: &'a mut mpsc::Receiver<FirewallRequest<Request>>,
         b_events_rx: &'a mut mpsc::Receiver<NetworkEvent>,
         b_request_rx: &'a mut mpsc::Receiver<ReceiveRequest<Request, Response>>,
     ) -> Self {

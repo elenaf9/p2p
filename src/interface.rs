@@ -45,10 +45,10 @@ use thiserror::Error;
 /// and receiving their response `Rs`.
 ///
 /// All [`Swarm`][`libp2p::Swarm`] interaction takes place in an event-loop in a separate task.
-/// [`StrongholdP2p`] is essentially a wrapper for the Sender side of a mpsc channel, which is used to initiate
+/// [`Network`] is essentially a wrapper for the Sender side of a mpsc channel, which is used to initiate
 /// operations on the swarm. Thus it is safe to clone, while still operating on the same swarm.
 ///
-/// Refer to [`StrongholdP2pBuilder`] for more information on the default configuration.
+/// Refer to [`NetworkBuilder`] for more information on the default configuration.
 ///
 /// ## Firewall configuration
 ///
@@ -67,7 +67,7 @@ use thiserror::Error;
 ///
 /// ```
 /// # use serde::{Serialize, Deserialize};
-/// # use p2p::{firewall::{FirewallRules, FwRequest}, ChannelSinkConfig, EventChannel, StrongholdP2p};
+/// # use p2p::{firewall::{FirewallRules, FwRequest}, ChannelSinkConfig, EventChannel, Network};
 /// # use futures::channel::mpsc;
 /// #
 /// // Type of the requests send to the remote.
@@ -114,7 +114,7 @@ use thiserror::Error;
 /// // peers connecting / disconnecting, listener events or non-fatal failures.
 /// let (events_tx, events_rx) = EventChannel::new(10, ChannelSinkConfig::BufferLatest);
 ///
-/// let p2p = StrongholdP2p::<Request, Response, RequestType>::new(
+/// let p2p = Network::<Request, Response, RequestType>::new(
 ///     firewall_tx,
 ///     request_tx,
 ///     Some(events_tx),
@@ -122,7 +122,7 @@ use thiserror::Error;
 /// );
 /// ```
 #[derive(Clone)]
-pub struct StrongholdP2p<Rq, Rs, TRq = Rq>
+pub struct Network<Rq, Rs, TRq = Rq>
 where
     // Request message type
     Rq: RqRsMessage,
@@ -141,14 +141,14 @@ where
     command_tx: mpsc::Sender<SwarmCommand<Rq, Rs, TRq>>,
 }
 
-impl<Rq, Rs, TRq> StrongholdP2p<Rq, Rs, TRq>
+impl<Rq, Rs, TRq> Network<Rq, Rs, TRq>
 where
     Rq: RqRsMessage,
     Rs: RqRsMessage,
     TRq: FwRequest<Rq>,
 {
-    /// Create a new [`StrongholdP2p`] instance with the default configuration.
-    /// Refer to [`StrongholdP2pBuilder::new`] and [`StrongholdP2pBuilder::build`] for more information.
+    /// Create a new [`Network`] instance with the default configuration.
+    /// Refer to [`NetworkBuilder::new`] and [`NetworkBuilder::build`] for more information.
     #[cfg(feature = "tcp-transport")]
     pub async fn new(
         firewall_channel: mpsc::Sender<FirewallRequest<TRq>>,
@@ -156,7 +156,7 @@ where
         events_channel: Option<EventChannel<NetworkEvent>>,
         firewall_rules: FirewallRules<TRq>,
     ) -> Result<Self, io::Error> {
-        StrongholdP2pBuilder::new(firewall_channel, requests_channel, events_channel, firewall_rules)
+        NetworkBuilder::new(firewall_channel, requests_channel, events_channel, firewall_rules)
             .build()
             .await
     }
@@ -187,7 +187,7 @@ where
     ///
     /// **Note**: Depending on the used transport, this may produce multiple listening addresses.
     /// This method only returns the first reported listening address for the new listener.
-    /// All active listening addresses for each listener can be obtained from [`StrongholdP2p::listeners`]
+    /// All active listening addresses for each listener can be obtained from [`Network::listeners`]
     pub async fn start_listening(&mut self, address: Multiaddr) -> Result<Multiaddr, ListenErr> {
         let (return_tx, rx_yield) = oneshot::channel();
         let command = SwarmCommand::StartListening { address, return_tx };
@@ -464,7 +464,7 @@ pub enum InitKeypair {
     },
 }
 
-/// Builder for new `StrongholdP2p`.
+/// Builder for new `Network`.
 ///
 /// Default behaviour:
 /// - A new keypair is created and used, from which the [`PeerId`] of the local peer is derived.
@@ -475,13 +475,13 @@ pub enum InitKeypair {
 /// - [`Relay`][`libp2p::relay`] protocol is supported. *Note:* This also means that other peers can use our peer as
 ///   relay.
 ///
-/// `StrongholdP2p` is build either via [`StrongholdP2pBuilder::build`] (requires feature **tcp-transport**) with a
-/// pre-configured transport, or [`StrongholdP2pBuilder::build_with_transport`] with a custom transport.
+/// `Network` is build either via [`NetworkBuilder::build`] (requires feature **tcp-transport**) with a
+/// pre-configured transport, or [`NetworkBuilder::build_with_transport`] with a custom transport.
 ///
-/// When building a new `StrongholdP2p` a new [`Swarm`][libp2p::Swarm] is created and continuously polled for events.
+/// When building a new `Network` a new [`Swarm`][libp2p::Swarm] is created and continuously polled for events.
 /// Inbound requests are forwarded through a `mpsc::channel<ReceiveRequest<Rq, Rs>>`    .
 /// Optionally all events regarding connections and listeners are forwarded as [`NetworkEvent`].
-pub struct StrongholdP2pBuilder<Rq, Rs, TRq = Rq>
+pub struct NetworkBuilder<Rq, Rs, TRq = Rq>
 where
     Rq: RqRsMessage,
     Rs: RqRsMessage,
@@ -514,7 +514,7 @@ where
     support_relay: bool,
 }
 
-impl<Rq, Rs, TRq> StrongholdP2pBuilder<Rq, Rs, TRq>
+impl<Rq, Rs, TRq> NetworkBuilder<Rq, Rs, TRq>
 where
     Rq: RqRsMessage,
     Rs: RqRsMessage,
@@ -531,7 +531,7 @@ where
         events_channel: Option<EventChannel<NetworkEvent>>,
         firewall_rules: FirewallRules<TRq>,
     ) -> Self {
-        StrongholdP2pBuilder {
+        NetworkBuilder {
             firewall_channel,
             requests_channel,
             events_channel,
@@ -583,7 +583,7 @@ where
 
     /// Set timeout for [`FirewallRequest`]s send through the firewall-channel.
     ///
-    /// See [`StrongholdP2p`] docs for more info.
+    /// See [`Network`] docs for more info.
     pub fn with_firewall_timeout(mut self, t: Duration) -> Self {
         self.behaviour_config.connection_timeout = t;
         self
@@ -616,7 +616,7 @@ where
     #[cfg(feature = "tcp-transport")]
     /// [`Self::build_with_transport`] with a [`Transport`] based on TCP/IP that supports dns resolution and websockets.
     /// It uses [`tokio::spawn`] as executor, hence this method has to be called in the context of a tokio.rs runtime.
-    pub async fn build(self) -> Result<StrongholdP2p<Rq, Rs, TRq>, io::Error> {
+    pub async fn build(self) -> Result<Network<Rq, Rs, TRq>, io::Error> {
         let dns_transport = TokioDnsConfig::system(TokioTcpConfig::new())?;
         let transport = dns_transport.clone().or_transport(WsConfig::new(dns_transport));
         let executor = |fut| {
@@ -625,7 +625,7 @@ where
         self.build_with_transport(transport, executor).await
     }
 
-    /// Create a new [`StrongholdP2p`] instance with an underlying [`Swarm`][libp2p::Swarm] that uses the provided
+    /// Create a new [`Network`] instance with an underlying [`Swarm`][libp2p::Swarm] that uses the provided
     /// transport.
     ///
     /// The transport is upgraded with:
@@ -634,7 +634,7 @@ where
     /// - Yamux substream multiplexing
     ///
     /// The method spawns an event loop in a new task with the provided executor, that handles all interaction with the
-    /// Swarm. The loop runs until [`StrongholdP2p`] is dropped, [`StrongholdP2p`] provides an interface to perform
+    /// Swarm. The loop runs until [`Network`] is dropped, [`Network`] provides an interface to perform
     /// operations in it.
     /// Additionally, the executor is used to configure the
     /// [`SwarmBuilder::executor`][libp2p::swarm::SwarmBuilder::executor].
@@ -642,7 +642,7 @@ where
     /// ```
     /// # use p2p::{
     ///     firewall::FirewallRules,
-    ///     ChannelSinkConfig, EventChannel,  StrongholdP2p, StrongholdP2pBuilder
+    ///     ChannelSinkConfig, EventChannel,  Network, NetworkBuilder
     /// };
     /// # use futures::channel::mpsc;
     /// # use std::error::Error;
@@ -652,8 +652,8 @@ where
     /// let (firewall_tx, firewall_rx) = mpsc::channel(10);
     /// let (request_tx, request_rx) = EventChannel::new(10, ChannelSinkConfig::BufferLatest);
     ///
-    /// let builder = StrongholdP2pBuilder::new(firewall_tx, request_tx, None, FirewallRules::allow_all());
-    /// let p2p: StrongholdP2p<String, String> = builder
+    /// let builder = NetworkBuilder::new(firewall_tx, request_tx, None, FirewallRules::allow_all());
+    /// let p2p: Network<String, String> = builder
     ///     .build_with_transport(TokioTcpConfig::new(), |fut| {
     ///          tokio::spawn(fut);
     ///     })
@@ -665,7 +665,7 @@ where
         self,
         transport: Tp,
         executor: E,
-    ) -> Result<StrongholdP2p<Rq, Rs, TRq>, io::Error>
+    ) -> Result<Network<Rq, Rs, TRq>, io::Error>
     where
         Tp: Transport + Sized + Clone + Send + Sync + 'static,
         Tp::Output: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -731,7 +731,7 @@ where
         let event_loop = EventLoop::new(swarm, command_rx, self.requests_channel, self.events_channel);
         executor.exec(event_loop.run().boxed());
 
-        Ok(StrongholdP2p {
+        Ok(Network {
             local_peer_id,
             command_tx,
         })

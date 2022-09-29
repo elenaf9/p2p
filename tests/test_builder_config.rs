@@ -5,20 +5,20 @@ use std::time::Duration;
 
 use p2p::{
     assemble_relayed_addr, firewall::FirewallRules, ChannelSinkConfig, DialErr, EventChannel, ListenErr,
-    ListenRelayErr, PeerId, StrongholdP2p, StrongholdP2pBuilder, TransportErr,
+    ListenRelayErr, Network, NetworkBuilder, PeerId, TransportErr,
 };
 
 use futures::channel::mpsc;
 #[cfg(not(feature = "tcp-transport"))]
 use libp2p::tcp::TokioTcpConfig;
 
-fn builder() -> StrongholdP2pBuilder<(), ()> {
+fn builder() -> NetworkBuilder<(), ()> {
     let (dummy_fw_tx, _) = mpsc::channel(10);
     let (dummy_rq_channel, _) = EventChannel::new(10, ChannelSinkConfig::DropLatest);
-    StrongholdP2pBuilder::new(dummy_fw_tx, dummy_rq_channel, None, FirewallRules::allow_all())
+    NetworkBuilder::new(dummy_fw_tx, dummy_rq_channel, None, FirewallRules::allow_all())
 }
 
-async fn build(builder: StrongholdP2pBuilder<(), ()>) -> StrongholdP2p<(), ()> {
+async fn build(builder: NetworkBuilder<(), ()>) -> Network<(), ()> {
     #[cfg(not(feature = "tcp-transport"))]
     let peer = {
         let executor = |fut| {

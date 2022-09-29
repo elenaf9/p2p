@@ -8,15 +8,15 @@ use futures::{
 #[cfg(not(feature = "tcp-transport"))]
 use libp2p::tcp::TokioTcpConfig;
 use p2p::{
-    assemble_relayed_addr, firewall::FirewallRules, ChannelSinkConfig, EventChannel, Multiaddr, NetworkEvent, PeerId,
-    StrongholdP2p, StrongholdP2pBuilder,
+    assemble_relayed_addr, firewall::FirewallRules, ChannelSinkConfig, EventChannel, Multiaddr, Network,
+    NetworkBuilder, NetworkEvent, PeerId,
 };
+use rand::random;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-use stronghold_utils::random::random;
 use tokio::time::sleep;
 
-type TestPeer = StrongholdP2p<Request, Response>;
+type TestPeer = Network<Request, Response>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct Request;
@@ -28,7 +28,7 @@ async fn init_peer() -> (mpsc::Receiver<NetworkEvent>, TestPeer) {
     let (dummy_fw_tx, _) = mpsc::channel(10);
     let (dummy_rq_channel, _) = EventChannel::new(10, ChannelSinkConfig::DropLatest);
     let (event_channel, event_rx) = EventChannel::new(10, ChannelSinkConfig::Block);
-    let builder = StrongholdP2pBuilder::new(
+    let builder = NetworkBuilder::new(
         dummy_fw_tx,
         dummy_rq_channel,
         Some(event_channel),

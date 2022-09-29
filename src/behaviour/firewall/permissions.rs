@@ -9,7 +9,7 @@
 //! [`FirewallPermission`], that unambiguously identifies what [`PermissionValue`]s were set.
 //!
 //! The [`VariantPermission`] can be implemented for a request enum to give each variant a different
-//! [`PermissionValue`]. It can be derived with the [`RequestPermissions`] macro, which:
+//! [`PermissionValue`]. It can be derived with the [`MessagePermissions`] macro, which:
 //! 1. implements [`PermissionValue`] for the type
 //! 2. generates a trimmed version of the type (`<type-name>Permissions`) that has the same variants
 //!    but without values:
@@ -17,10 +17,10 @@
 //! ```
 //! # use p2p::{
 //! #   firewall::{
-//! #       permissions::{FirewallPermission, PermissionValue, RequestPermissions, VariantPermission},
+//! #       permissions::{FirewallPermission, PermissionValue, VariantPermission},
 //! #       FirewallRules, FwRequest, Rule,
 //! #   },
-//! #   ChannelSinkConfig, EventChannel, StrongholdP2p, StrongholdP2pBuilder,
+//! #   ChannelSinkConfig, EventChannel, Network, NetworkBuilder,
 //! # };
 //! # use futures::channel::mpsc;
 //! # use std::{error::Error, marker::PhantomData, sync::Arc};
@@ -37,11 +37,38 @@
 //! // }
 //! // ```
 //! //
-//! #[derive(Debug, RequestPermissions, Serialize, Deserialize)]
+//! #[derive(Debug, Serialize, Deserialize)]
 //! enum Message {
 //!     Ping,
 //!     Message(String),
 //!     Other(Vec<u8>),
+//! }
+//!
+//! #[derive(Debug, Clone, PartialEq, Eq)]
+//! enum MessagePermission {
+//!     Ping,
+//!     Message,
+//!     Other,
+//! }
+//!
+//! impl VariantPermission for MessagePermission {
+//!     fn permission(&self) -> PermissionValue {
+//!         match self {
+//!             MessagePermission::Ping => PermissionValue::new(0).expect("0 < 32"),
+//!             MessagePermission::Message => PermissionValue::new(1).expect("1 < 32"),
+//!             MessagePermission::Other => PermissionValue::new(2).expect("2 < 32"),
+//!         }
+//!     }
+//! }
+//!
+//! impl FwRequest<Message> for MessagePermission {
+//!     fn from_request(request: &Message) -> Self {
+//!         match request {
+//!             Message::Ping => MessagePermission::Ping,
+//!             Message::Message(_) => MessagePermission::Message,
+//!             Message::Other(_) => MessagePermission::Other,
+//!         }
+//!     }
 //! }
 //!
 //! assert_eq!(MessagePermission::Ping.permission(), 1);
@@ -50,7 +77,8 @@
 //!
 //! // Create rule that only permits ping-messages.
 //! let restriction = |rq: &MessagePermission| {
-//!     let allowed_variant = FirewallPermission::none().add_permissions([&MessagePermission::Ping.permission()]);
+//!     let allowed_variant =
+//!         FirewallPermission::none().add_permissions([&MessagePermission::Ping.permission()]);
 //!     allowed_variant.permits(&rq.permission())
 //! };
 //! let rule: Rule<MessagePermission> = Rule::Restricted {
@@ -61,16 +89,14 @@
 //! # let (firewall_tx, firewall_rx) = mpsc::channel(10);
 //! # let (request_tx, request_rx) = EventChannel::new(10, ChannelSinkConfig::BufferLatest);
 //! #
-//! let builder = StrongholdP2pBuilder::new(firewall_tx, request_tx, None, FirewallRules::allow_all());
+//! let builder = NetworkBuilder::new(firewall_tx, request_tx, None, FirewallRules::allow_all());
 //!
-//! // Use `MessagePermissions` in StrongholdP2p as type for firewall requests.
-//! let p2p: StrongholdP2p<Message, MessageResponse, MessagePermission> = builder.build().await?;
+//! // Use `MessagePermissions` in Network as type for firewall requests.
+//! let p2p: Network<Message, MessageResponse, MessagePermission> = builder.build().await?;
 //! #
 //! # Ok(())
 //! # }
 //! ```
-
-pub use stronghold_derive::RequestPermissions;
 
 /// The permission value for request variants.
 /// This is realized as a bit set at a certain index, hence the value is always a power of 2.

@@ -1,7 +1,7 @@
 // Copyright 2020-2021 IOTA Stiftung
 // SPDX-License-Identifier: Apache-2.0
 
-//! Firewall in [`StrongholdP2p`][`crate::StrongholdP2p`] for filtering inbound requests.
+//! Firewall in [`Network`][`crate::Network`] for filtering inbound requests.
 
 pub mod permissions;
 use core::fmt;
@@ -110,11 +110,11 @@ impl<TRq> Clone for Rule<TRq> {
     }
 }
 
-/// Rules for the firewall of [`StrongholdP2p`][crate::StrongholdP2p].
+/// Rules for the firewall of [`Network`][crate::Network].
 /// These rules specifies what inbound requests from which peers are allowed.
 /// If there is neither a default rule, nor a peer specific one for a request from a peer,
 /// a [`FirewallRequest::PeerSpecificRule`] will be sent through the firewall-channel that is passed to
-/// `StrongholdP2p`.
+/// `Network`.
 ///
 /// Per default no rule is set.
 #[derive(Debug)]

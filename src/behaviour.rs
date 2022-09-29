@@ -831,7 +831,7 @@ pub struct ConfigConfig {
     pub connection_timeout: Duration,
     /// Timeout for `FirewallRequest`s send through the firewall-channel.
     ///
-    /// See `StrongholdP2p` docs for more info.
+    /// See `Network` docs for more info.
     pub firewall_timeout: Duration,
 }
 
@@ -901,7 +901,7 @@ pub enum OutboundFailure {
     ConnectionClosed,
     /// The remote supports none of the requested protocols.
     UnsupportedProtocols,
-    /// `StrongholdP2p` was shut down before a response was received.
+    /// `Network` was shut down before a response was received.
     Shutdown,
 }
 
@@ -955,7 +955,7 @@ mod test {
     use core::panic;
 
     use super::*;
-    use crate::firewall::permissions::{PermissionValue, RequestPermissions, VariantPermission};
+    use crate::firewall::permissions::{PermissionValue, VariantPermission};
     use futures::{channel::mpsc, StreamExt};
     use libp2p::{
         core::{identity, upgrade, PeerId, Transport},
@@ -1178,8 +1178,15 @@ mod test {
         (peer, builder.build())
     }
 
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RequestPermissions)]
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct Ping(Vec<u8>);
-    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RequestPermissions)]
+
+    impl VariantPermission for Ping {
+        fn permission(&self) -> PermissionValue {
+            PermissionValue::new(0).expect("0 < 32")
+        }
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
     struct Pong(Vec<u8>);
 }

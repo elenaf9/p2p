@@ -1,7 +1,7 @@
 // Copyright 2020-2021 IOTA Stiftung
 // SPDX-License-Identifier: Apache-2.0
 
-//! This example demonstrates a dynamic usage of the Stronghold-P2p firewall.
+//! This example demonstrates a dynamic usage of the network firewall.
 //! Instead setting fixed rules, it dynamically asks the user to set a firewall rule for each peer that connects.
 //!
 //! There are two different types of requests we can send to a remote:
@@ -64,10 +64,10 @@
 use futures::{channel::mpsc, FutureExt, StreamExt};
 use p2p::{
     firewall::{
-        permissions::{FirewallPermission, PermissionValue, RequestPermissions, VariantPermission},
+        permissions::{FirewallPermission, PermissionValue, VariantPermission},
         FirewallRequest, FirewallRules, FwRequest, Rule,
     },
-    ChannelSinkConfig, EventChannel, PeerId, ReceiveRequest, StrongholdP2p,
+    ChannelSinkConfig, EventChannel, Network, PeerId, ReceiveRequest,
 };
 use regex::Regex;
 use serde::{Deserialize, Serialize};
@@ -76,10 +76,34 @@ use tokio::io::{stdin, AsyncBufReadExt, BufReader, Lines, Stdin};
 
 const RETRY_USER_INPUT_MAX: usize = 3;
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, RequestPermissions)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 enum Request {
     Ping,
     Message(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum RequestPermission {
+    Ping,
+    Message,
+}
+
+impl VariantPermission for RequestPermission {
+    fn permission(&self) -> PermissionValue {
+        match self {
+            RequestPermission::Ping => PermissionValue::new(0).expect("0 < 32"),
+            RequestPermission::Message => PermissionValue::new(1).expect("1 < 32"),
+        }
+    }
+}
+
+impl FwRequest<Request> for RequestPermission {
+    fn from_request(request: &Request) -> Self {
+        match request {
+            Request::Ping => RequestPermission::Ping,
+            Request::Message(_) => RequestPermission::Message,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -99,7 +123,7 @@ fn allow_only_ping(request: &RequestPermission) -> bool {
 // - "-p <peer-id>": Send a ping
 // - "-p <peer-id> -m <message>"": Send a message
 async fn on_user_input(
-    network: &mut StrongholdP2p<Request, Response, RequestPermission>,
+    network: &mut Network<Request, Response, RequestPermission>,
     input: String,
 ) -> Result<(), Box<dyn Error>> {
     let peer_regex = "-p\\s+(?P<target>[[:alnum:]]{32,64})";
@@ -262,7 +286,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
     let mut rules = FirewallRules::default();
     rules.set_default(Some(Rule::AllowAll));
-    let mut network = StrongholdP2p::new(firewall_tx, request_tx, None, rules).await?;
+    let mut network = Network::new(firewall_tx, request_tx, None, rules).await?;
 
     network.start_listening("/ip4/0.0.0.0/tcp/0".parse()?).await?;
     println!("\nLocal Peer Id: {}", network.peer_id());

@@ -35,7 +35,7 @@ pub struct MessageProtocol {
 
 impl MessageProtocol {
     pub fn new_version(major: u8, minor: u8, patch: u8) -> Self {
-        let version = format!("/stronghold-p2p/{}.{}.{}", major, minor, patch);
+        let version = format!("/p2p/{}.{}.{}", major, minor, patch);
         MessageProtocol { version }
     }
 }

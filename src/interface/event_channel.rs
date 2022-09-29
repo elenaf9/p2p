@@ -16,8 +16,8 @@ pub enum ChannelSinkConfig {
     /// Block until the channel has enough capacity for the new request.
     ///
     /// **Note**: This pauses all network interaction and enforces back-pressure, which may be desirable if the machine
-    /// is at its limit. But it also hinders all active actions on `StrongholdP2p`, hence asynchronous methods like
-    /// [`StrongholdP2p::send_request`][crate::StrongholdP2p::send_request] will be blocked as well.
+    /// is at its limit. But it also hinders all active actions on `Network`, hence asynchronous methods like
+    /// [`Network::send_request`][crate::Network::send_request] will be blocked as well.
     Block,
     /// New events will be dropped if the channel is full.
     DropLatest,
@@ -32,7 +32,7 @@ pub enum ChannelSinkConfig {
 /// is full.
 ///
 /// **Note** in case of [`ChannelSinkConfig::Block`] the [`mpsc::Receiver`] returned in [`EventChannel::new`]
-/// has to be polled continuously, otherwise `StrongholdP2p` will block while the channel is full.
+/// has to be polled continuously, otherwise `Network` will block while the channel is full.
 #[pin_project]
 pub struct EventChannel<T> {
     // Actual channel
@@ -181,10 +181,9 @@ impl<T> Stream for EventChannel<T> {
 #[cfg(test)]
 mod test {
     use futures::{FutureExt, StreamExt};
+    use rand::random;
     use std::time::Duration;
     use tokio::time::sleep;
-
-    use stronghold_utils::random;
 
     use super::*;
 
@@ -194,7 +193,11 @@ mod test {
     fn test_vec() -> Vec<Vec<u8>> {
         let mut data = Vec::with_capacity(TEST_DATA_COUNT);
         for _ in 0..data.capacity() {
-            let v = random::bytestring(32);
+            let max_len = (random::<usize>() % 31) + 1;
+            let mut v = Vec::with_capacity(max_len);
+            for _ in 0..max_len {
+                v.push(random());
+            }
             data.push(v)
         }
         data
